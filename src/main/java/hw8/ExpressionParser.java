@@ -61,6 +61,17 @@ public class ExpressionParser {
 		// Advance "position" beyond token
 		position += token.length();
 
+		
+//==============================New Stuff===================================================
+		// Just adding functionality for NOT, which is similar to others just with only a right side.
+		if (token.equals("NOT ")) {
+			BooleanExp right = parse(str);
+			if ((right == null)) { 
+				return null;
+			}
+			return new NotExp(null,right);
+		}
+//==========================================================================================
 		// If token is AND, parse the left operand into "left", 
 		// then parse the right operand into "right" and create 
 		// an And Boolean Expression
@@ -70,7 +81,7 @@ public class ExpressionParser {
 			if ((left == null) || (right == null)) { 
 				return null;
 			}
-			return new BooleanExp(2,left,right,null,null);
+			return new AndExp(left,right);
 		}
 		else if (token.equals("OR ")) {
 			BooleanExp left = parse(str);
@@ -78,13 +89,13 @@ public class ExpressionParser {
 			if ((left == null) || (right == null)) {
 				return null;
 			}
-			return new BooleanExp(3,left,right,null,null);			
+			return new OrExp(left,right);			
 		}
 		else if (token.equals("true") || token.equals("true ")) {
-			return new BooleanExp(0,null,null,Boolean.TRUE,null);
+			return new Constant(Boolean.TRUE);
 		}
 		else if (token.equals("false") || token.equals("false ")) {
-			return new BooleanExp(0,null,null,Boolean.FALSE,null);
+			return new Constant(Boolean.FALSE);
 		}
 		// Otherwise, the token is a variable (e.g., x, xyz). 
 		// Get rid of the white space if necessary 
@@ -92,7 +103,7 @@ public class ExpressionParser {
 		    if (token.charAt(token.length()-1)==' ') {
 		    	token = token.substring(0,token.length()-1);
 		    }
-		    return new BooleanExp(1,null,null,null,token);
+		    return new VarExp(token);
 		}
 			
 	}
@@ -127,70 +138,12 @@ public class ExpressionParser {
 	private String print(boolean preorder, BooleanExp exp) {
 		StringBuffer result = new StringBuffer();
 		if (preorder) { // print in Preorder
-			switch (exp.getExpressionCode()) {
-				case BooleanExp.AND: 
-					result.append("AND ");
-					result.append(print(preorder,exp.getLeft()));
-					result.append(" ");
-					result.append(print(preorder,exp.getRight()));
-					break;
-				case BooleanExp.OR:
-					result.append("OR ");
-					result.append(print(preorder,exp.getLeft()));
-					result.append(" ");
-					result.append(print(preorder,exp.getRight()));
-					break;
-				case BooleanExp.CONST:
-					result.append(exp.getValue());
-					break;
-				case BooleanExp.VAR:
-					result.append(exp.getVarString());
-					break;
-			}
+			result.append(exp.printPreorder());
 		}			
 		else { // print Inorder, getting rid of redundant parentheses
-			switch (exp.getExpressionCode()) {
-				case BooleanExp.AND: 
-					if (exp.getLeft().getExpressionCode() > BooleanExp.AND) {
-						// if left operand is an expression of equal or lower precedence, parens are needed 
-						result.append("("); result.append(print(preorder,exp.getLeft())); result.append(")");
-					}
-					else {
-						// otherwise, i.e., of higher precedence, no parens needed
-						result.append(print(preorder,exp.getLeft())); 
-					}
-					result.append(" AND ");
-					if (exp.getRight().getExpressionCode() >= BooleanExp.AND) {
-						result.append("("); result.append(print(preorder,exp.getRight())); result.append(")");
-					}
-					else {
-						result.append(print(preorder,exp.getRight())); 
-					}				
-					break;
-				case BooleanExp.OR:
-					if (exp.getLeft().getExpressionCode() > BooleanExp.OR) {
-						result.append("("); result.append(print(preorder,exp.getLeft())); result.append(")");
-					}
-					else {
-						result.append(print(preorder,exp.getLeft())); 
-					}
-					result.append(" OR ");
-					if (exp.getRight().getExpressionCode() >= BooleanExp.OR) {
-						result.append("("); result.append(print(preorder,exp.getRight())); result.append(")");
-					}
-					else {
-						result.append(print(preorder,exp.getRight())); 
-					}				
-					break;				
-				case BooleanExp.CONST:
-					result.append(exp.getValue());
-					break;
-				case BooleanExp.VAR:
-					result.append(exp.getVarString());
-					break;
-				}
-			}
-			return result.toString();
+			result.append(exp.printInorder());
+		}
+		return result.toString();
 		
 	}
 	/**
@@ -200,33 +153,27 @@ public class ExpressionParser {
 	 * @return value of BooleanExp exp in Context context
 	 */
 	private boolean evaluate(Context context, BooleanExp exp) {
-		
-		if (exp.getExpressionCode() == BooleanExp.AND) {
-				return evaluate(context, exp.getLeft()) && 
-						evaluate(context, exp.getRight()); 
-		}
-		else if (exp.getExpressionCode() == BooleanExp.OR) {
-				return evaluate(context, exp.getLeft()) || 
-						evaluate(context, exp.getRight());
-		}
-		else if (exp.getExpressionCode() == BooleanExp.CONST) {
-				return exp.getValue();
-		}
-		else if (exp.getExpressionCode() == BooleanExp.VAR) {
-				return context.lookup(exp.getVarString());
-		}
-		return false;		
+		return exp.evaluate(context);	      // Evaluate using evaluate public method
 	}
 
-		
+	/**
+	 * @param context
+     * @return value of BooleanExp exp in Context context through a visitor design pattern
+     * (it has knowledge of the data structure)
+	 */	
 	public boolean visitorEvaluate() {
-		// TODO: Implement your Visitor-based evaluation here.
-		return false;
+		Evaluate eval = new Evaluate(context); // Create a Visitor Evaluate object
+		expression.accept(eval);               // Accept it then get results
+		return eval.getResult();
 	}
-	
+	/**
+	 * @return string corresponding to Inorder of the BooleanExp through a visitor design pattern
+	 * (it has knowledge of the data structure)
+	 */	
 	public String visitorPrint() {
-		// TODO: Implement your Visitor-based inorder printing here.
-		return "";
+		PrintInorder print = new PrintInorder(); // Create a Visitor PrintInorder object
+		expression.accept(print);			     // Accept it then get results
+		return print.getResult();
 	}
 	
 	
